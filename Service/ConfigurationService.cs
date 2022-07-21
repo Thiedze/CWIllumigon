@@ -5,13 +5,13 @@ namespace CWIllumigon.Service;
 
 public class ConfigurationService
 {
-    private int Index { get; set; } = 1;
+    private int IndexColor { get; set; } = 0;
 
     private static int RedColorRange => 20;
     private int Red { get; set; } = 320;
 
     private static int GreenColorRange => 20;
-    private int Green { get; set; } = 220;
+    private int Green { get; set; } = 245;
 
     private static int BlueColorRange => 20;
     private int Blue { get; set; } = 170;
@@ -39,36 +39,8 @@ public class ConfigurationService
         var scale = Math.Min(Math.Min((double) 600 / image.Cols, (double) 600 / image.Rows), 1.0);
         Cv2.Resize(image, image, new Size(), scale, scale);
 
-        ShowImageWithNewParameter(image, Index);
-
-        var valueRed = Red;
-        Cv2.CreateTrackbar("Red", WindowName, ref valueRed, 360, (pos, _) =>
-        {
-            Red = pos;
-            ShowImageWithNewParameter(image, Index);
-        });
-
-        var valueGreen = Green;
-        Cv2.CreateTrackbar("Green", WindowName, ref valueGreen, 360, (pos, _) =>
-        {
-            Green = pos;
-            ShowImageWithNewParameter(image, Index);
-        });
-
-        var valueBlue = Blue;
-        Cv2.CreateTrackbar("Blue", WindowName, ref valueBlue, 360, (pos, _) =>
-        {
-            Blue = pos;
-            ShowImageWithNewParameter(image, Index);
-        });
-
-        var valueIndex = Index;
-        Cv2.CreateTrackbar("Index", WindowName, ref valueIndex, 2, (pos, _) =>
-        {
-            Index = pos;
-            ShowImageWithNewParameter(image, Index);
-        });
-
+        RenderImage(image, IndexColor);
+        CreateTrackbars(image);
 
         for (var index = 0; index < triangleCount; index++)
         {
@@ -79,7 +51,7 @@ public class ConfigurationService
         Cv2.WaitKey();
     }
 
-    private void ShowImageWithNewParameter(Mat image, int index)
+    private void RenderImage(Mat image, int index)
     {
         RefreshLowH(Red, Green, Blue);
         RefreshHighH(Red, Green, Blue);
@@ -91,8 +63,35 @@ public class ConfigurationService
         var higherHsv = new Scalar(_highH[index], 255, 255);
 
         Cv2.InRange(result, lowerHsv, higherHsv, result);
+        // Cv2.ImShow("Hsv", result);
 
-        Cv2.ImShow(WindowName, result);
+        Cv2.GaussianBlur(result, result, new Size(11, 11), 0);
+        // Cv2.ImShow("Blur", result);
+
+        Cv2.Threshold(result, result, 200, 255, ThresholdTypes.Binary);
+        // Cv2.ImShow("Threshold", result);
+
+        Cv2.Erode(result, result, null, null, 2);
+        Cv2.Dilate(result, result, null, null, 4);
+        // Cv2.ImShow("Erode / Dilate", result);
+
+        var imageWithCycle = DrawCycle(image, result);
+        Cv2.ImShow(WindowName, imageWithCycle);
+    }
+
+    private static Mat DrawCycle(Mat image, Mat result)
+    {
+        Cv2.FindContours(result.Clone(), out var contours, new Mat(), RetrievalModes.External,
+            ContourApproximationModes.ApproxSimple);
+
+        var imageWithCycle = image.Clone();
+        foreach (var contour in contours)
+        {
+            Cv2.MinEnclosingCircle(contour, out var point, out var radius);
+            Cv2.Circle(imageWithCycle, (int) point.X, (int) point.Y, (int) radius, new Scalar(0, 0, 255), 3);
+        }
+
+        return imageWithCycle;
     }
 
     private static Triangle CreateTriangle(int position)
@@ -123,6 +122,37 @@ public class ConfigurationService
         });
 
         return segment;
+    }
+
+    private void CreateTrackbars(Mat image)
+    {
+        var valueRed = Red;
+        Cv2.CreateTrackbar("Red", WindowName, ref valueRed, 360, (pos, _) =>
+        {
+            Red = pos;
+            RenderImage(image, IndexColor);
+        });
+
+        var valueGreen = Green;
+        Cv2.CreateTrackbar("Green", WindowName, ref valueGreen, 360, (pos, _) =>
+        {
+            Green = pos;
+            RenderImage(image, IndexColor);
+        });
+
+        var valueBlue = Blue;
+        Cv2.CreateTrackbar("Blue", WindowName, ref valueBlue, 360, (pos, _) =>
+        {
+            Blue = pos;
+            RenderImage(image, IndexColor);
+        });
+
+        var valueIndex = IndexColor;
+        Cv2.CreateTrackbar("Index", WindowName, ref valueIndex, 2, (pos, _) =>
+        {
+            IndexColor = pos;
+            RenderImage(image, IndexColor);
+        });
     }
 
     private void RefreshLowH(int hValueRed, int hValueGreen, int hValueBlue)
